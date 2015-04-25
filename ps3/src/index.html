@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+
+<!--
+  COLLABORATORS:
+  None, as I did not discuss the assignment with anybody.
+  I did look at http://deepliquid.com/blog/archives/98 to help with the drawing of the arrows (vector math, etc), and used the example code in the site.
+
+  I did modify the draw function for my own needs, as I needed to use it whenever a new move was made, and needed the coordinates from the objects
+  
+  For PS3:
+
+  Implemented drag and drop with the help of http://www.webreference.com/programming/javascript/mk/column2/index.html
+  No other collaborators besides minor tips from Kapaya Kotongo (on using document.on("mousemove" etc) and states for mouse events )
+-->
+<html>
+
+<head>
+<meta content="text/html; charset=utf-8" http-equiv="Content-Type" />
+<title>Checkerboard</title>
+
+<!-- Load style sheets -->
+<link rel="stylesheet" type="text/css" href="mainLayout.css" />
+
+<!-- Load any supplemental Javascript libraries here -->
+<script type="text/javascript" src="external_js/jquery-1.9.0.min.js"></script>
+<script type="text/javascript" src="checker.js"></script>
+<script type="text/javascript" src="boardEvent.js"></script>
+<script type="text/javascript" src="board.js"></script>
+<script type="text/javascript" src="rules.js"></script>
+<script type="text/javascript" src="draw.js"></script>
+
+<script type="text/javascript">
+
+
+    $.extend({
+        getUrlVars : function() {
+            var vars = [], hash;
+            var hashes = window.location.href.slice(
+                window.location.href.indexOf('?') + 1).split('&');
+            for ( var i = 0; i < hashes.length; i++) {
+                hash = hashes[i].split('=');
+                vars.push(hash[0]);
+                vars[hash[0]] = hash[1];
+            }
+            return vars;
+        },
+        getUrlVar : function(name) {
+            return $.getUrlVars()[name];
+        }
+    });
+
+    var DEFAULT_BOARD_SIZE = 8;
+
+    //data model
+    var board;
+    var rules;
+    var whoseTurn = "black";	
+
+
+
+    var directionOf = function(color) {
+      if (color == "black") {
+        return -1;
+      }
+      return 1;
+    }
+
+
+    // This allows the Javascript code inside this block to only run when the page
+    // has finished loading in the browser.
+    $(document).ready(function() {
+        var canvas,ctx;
+        var canvas = document.getElementById("arrowCanvas");
+        var ctx = canvas.getContext("2d"); //establish a 2D context
+
+        //stuff
+        var size;
+        //end stuff
+        if ($.getUrlVar('size') && $.getUrlVar('size') >= 6) {
+            board = new Board($.getUrlVar('size'));
+            size = $.getUrlVar('size');
+        } else {
+            board = new Board(DEFAULT_BOARD_SIZE);
+            size = DEFAULT_BOARD_SIZE;
+        }
+        
+
+        //i added this
+        draw(0,0,size);
+        pixSquare = 400.0/size;
+        //use size for stuff
+
+        //end stuff
+    rules = new Rules(board);
+//added this ps3
+  
+    var position = $("#canvas").offset();
+    //color of arrow (for moves vs undo)
+    var arrowColor;
+    var active;
+    var state = "off";
+    var mouseDown = false;
+    var col,row,rowTo,colTo;
+    var prevX,prevY;
+    var x_offset,y_offset,nextMove;
+    var oldX,oldY,newX,newY;
+    //checks whether random move or user input
+    var notRandomMove = false;
+
+    var undo = [];
+    var redo = [];
+
+    $(document).on("dragstart",function(){
+        return false;
+    });
+
+    $(document).on("mousedown",".checker",function(e){
+        e.preventDefault();
+        //on mouse down and if the selected element's turn is up
+        if(whoseTurn == this.dataset.color && state == "off"){
+            
+            active = this;
+            //so it goes on top of arrow/other checker when hovering over
+            active.style.zIndex = "6000";
+            state ="down";
+            mouseDown = true;
+            prevX = active.style.left;
+            prevY = active.style.top;
+
+            x_offset = e.pageX - parseFloat(active.style.left);
+            y_offset = e.pageY - parseFloat(active.style.top);
+
+            col = Math.floor(parseFloat(active.style.left) /pixSquare);
+            row = Math.floor(parseFloat(active.style.top) / pixSquare);
+
+
+        }
+    });
+
+    $(document).on("mousemove",".checker",function(e){
+        e.preventDefault();
+        if(mouseDown == false && active != null){
+
+            //reset the checker
+            //console.log("mouseUp");
+            active.style.left = prevX;
+            active.style.top = prevY;
+            state ="off";
+
+        }
+        if (state == "down" || (state == "moving")){
+            active.style.left = e.pageX - x_offset + "px";
+            active.style.top = e.pageY - y_offset + "px";
+            state = "moving";
+        }
+    });
+
+    $(document).on("mouseup",".checker",function(e){
+        e.preventDefault();
+        mouseDown = false;
+        if(state =="moving" ){
+            rowTo = Math.floor((e.pageY - position.top)/pixSquare);
+            colTo = Math.floor((e.pageX - position.left) /pixSquare);
+
+            var checker = board.getCheckerAt(row,col);
+            //differentiate between random and not random move (for the drawn arrow)
+            notRandomMove = true;
+            //arrow color differentiate between redo, undo, moves, etc
+            arrowColor = "yellow";
+            var nextMove = rules.makeMove(checker,directionOf(whoseTurn),directionOf(whoseTurn),rowTo,colTo);
+
+            if(nextMove ==null){
+                active.style.left = prevX;
+                active.style.top = prevY;
+
+            }else{
+
+                redo = [];
+                $("#redo_button").attr("disabled",true);
+                undo.push(nextMove);
+
+                toggleTurn(whoseTurn);
+                
+            }
+
+        }else{
+            if(active!= null){
+                active.style.left = prevX;
+                active.style.top = prevY;
+            }
+        }
+        active.style.zIndex = "3000";
+        state ="off";
+    });
+
+    //check if off canvas
+    var canv = document.getElementById("canvas");
+    $(canv).mouseout(function(){
+        //reset the checker
+        mouseDown = false;
+        state ="off";
+        if(active!= null){
+            active.style.left = prevX;
+            active.style.top = prevY;
+        }
+
+    });
+    
+//end of
+
+
+    // Fill in this function to toggle the display for whose turn
+    // The color parameter should be either "black" or "red"
+    var toggleTurn = function(color) {
+       if(whoseTurn == "red"){
+            whoseTurn = "black";
+            $("#player").text("Black");
+            $(".toggleColor").css('background-color','black');
+
+       }else{
+            whoseTurn = "red";
+            $("#player").text("Red");
+            $(".toggleColor").css('background-color','red');
+       }
+    }
+
+	
+
+
+        
+        //used duplicate code between event listeners as they had different parameters (moves required old and new coordinates, vs added checkers)
+        board.addEventListener('add',function (e) {
+    		
+            //function(type, details)
+            //var details = {checker:checker, row:checker.row, col:checker.col};
+            draw(0,0,size);
+            var details = e.details;
+            var checker = details["checker"];
+
+            var row = details["row"];
+            var col = details["col"];
+            //console.log(row);
+            var newChecker = document.createElement("img");
+            //var existingCheckers = $(".checker").length;
+            var newID = String(row) + "_" + String(col);
+            $(newChecker).attr("id",newID);
+            $(newChecker).attr("draggable", "true");
+            $(newChecker).addClass("checker");
+
+
+               
+
+            if(checker != null){
+                //console.log("inside");
+                //red checkers
+                newChecker.setAttribute("data-color",checker.color);
+                if(checker.color == "red"){
+                    if(checker.isKing){
+                        //red king
+                        newChecker.setAttribute("src", "graphics/red-king.png");
+                    }else{
+                        newChecker.setAttribute("src", "graphics/red-piece.png");
+                    }
+
+                }else{
+                //black checkers
+                    if(checker.isKing){
+                        //black king
+                        newChecker.setAttribute("src", "graphics/black-king.png");
+                    }else{
+                        newChecker.setAttribute("src", "graphics/black-piece.png");                  
+                    }
+                }
+                //set the img attribute height and width
+                newChecker.setAttribute("height",String(pixSquare));
+                newChecker.setAttribute("width",String(pixSquare));
+
+                //set the position
+                newChecker.style.position = "absolute";
+                //for spacing in the middle
+               
+                newChecker.style.top = String(pixSquare * row ) + "px";
+                
+                newChecker.style.left =  String(pixSquare * col ) + "px";
+                newChecker.style.zIndex  = "3000";
+                
+                //console.log("column: " + col + " ," + "row: " + row);
+                //newChecker.style.position = "relative";
+
+                //%("#overlay").append(newChecker);
+                document.getElementById("overlay").appendChild(newChecker);
+            }else{
+                //console.log("fail");
+
+            }
+            //drawArrow(ctx,oldX,oldY,newX,newY,arrowColor); 
+  
+
+    	},true);
+
+        
+
+    	board.addEventListener('move',function (e) {
+            draw(0,0,size);
+    		//set buttons to enabled after first move
+            $("#undo_button").attr("disabled",false);
+
+            //var details = {checker:checker, toRow:toRow, toCol:toCol, fromRow:checker.row, fromCol:checker.col};
+            var details = e.details;
+            var checker = details["checker"];
+            var toRow = details["toRow"];
+            var toCol = details["toCol"];
+            var fromRow = details["fromRow"];
+            var fromCol = details["fromCol"]; 
+            var newChecker = document.createElement("img");
+            var existingCheckers = $(".checker").length;
+            var newID = String(toRow) + "_" + String(toCol);
+            var oldID = String(fromRow) + "_" + String(fromCol);
+            //console.log("move");
+            $(newChecker).attr("id",newID);
+            $(newChecker).attr("draggable", "true");
+            $(newChecker).addClass("checker");
+
+            //console.log("toRow: " + toRow);
+            //console.log("toCol: " + toCol);
+
+            //console.log("fromRow: " + fromRow);
+            //console.log("fromCol: " + fromCol);
+            
+            //get position of the old move
+            var oldImg = document.getElementById(oldID);
+            //console.log("notRandomMove: " +String(notRandomMove));
+            if(notRandomMove == true){
+                oldX = parseInt(prevX) +pixSquare/2;
+                oldY = parseInt(prevY) +pixSquare/2;
+
+            }
+            else{
+                oldX = parseInt(oldImg.style.left,10) +pixSquare/2;
+                oldY = parseInt(oldImg.style.top,10) +pixSquare/2;
+            }
+            notRandomMove = false;
+
+
+            var removeID = "#" + oldID;
+            $(removeID).remove();
+
+            newChecker.setAttribute("data-color",checker.color);
+            if(checker.color == "red"){
+               
+                if(checker.isKing){
+                    newChecker.setAttribute("src", "graphics/red-king.png");
+                }else{
+                    newChecker.setAttribute("src", "graphics/red-piece.png");
+                }
+
+            }else{
+                if(checker.isKing){
+                    newChecker.setAttribute("src", "graphics/black-king.png");
+                }else{
+                    newChecker.setAttribute("src", "graphics/black-piece.png");                  
+                }
+            }
+            newChecker.setAttribute("height",String(pixSquare));
+            newChecker.setAttribute("width",String(pixSquare));
+
+            newChecker.style.position = "absolute";
+            //for spacing in the middle
+            
+            newChecker.style.top = String(pixSquare * toRow ) + "px";
+            
+            newChecker.style.left =  String(pixSquare * toCol  ) + "px";
+
+            //get position of the new move
+            
+            newX = parseInt(newChecker.style.left,10) + pixSquare/2;
+            newY = parseInt(newChecker.style.top,10) + pixSquare/2;
+                
+            //console.log("old x: " + oldX + "," + "old y: " + oldY);
+            //console.log("new x: " + newX + "," + "new y: " + newY);
+
+            //draw arrow
+            
+            //console.log("style.top: " + newChecker.style.top + ", style.left: " + newChecker.style.left);
+            //console.log("column: " + toCol + " ," + "row: " + toRow);
+            //newChecker.style.position = "relative";
+
+            //%("#overlay").append(newChecker);
+            newChecker.style.zIndex  = "3000";
+            //console.log("arrow color:" + arrowColor);
+            document.getElementById("overlay").appendChild(newChecker);
+            drawArrow(ctx,oldX,oldY,newX,newY,arrowColor);  
+    	},true);
+
+        board.addEventListener('remove', function(e) {
+            draw(0,0,size);
+        	
+            //var details = {checker:checker, row:checker.row, col:checker.col};
+            var details = e.details; 
+            var checker = details["checker"];
+            var row = details["row"];
+            var col = details["col"];
+            var newChecker = document.createElement("img");
+
+            var existingCheckers = $(".checker").length;
+            var oldID = String(row) + "_" + String(col);
+
+            var removeID = "#" + oldID;
+            $(removeID).remove();
+            drawArrow(ctx,oldX,oldY,newX,newY); 
+
+        }, true);
+
+        board.addEventListener('promote',function (e) {
+            draw(0,0,size);
+    		//{checker:checker}
+            var details = e.details;
+            var checker = details["checker"];
+            var row = checker.row;
+            var col = checker.col;
+            var newChecker = document.createElement("img");
+            var oldID = String(row) + "_" + String(col);
+
+            var removeID = "#" + oldID;
+            $(removeID).remove();
+            $(newChecker).attr("id",oldID);
+            $(newChecker).attr("draggable", "true");
+            $(newChecker).addClass("checker");
+
+            //red checkers
+            newChecker.setAttribute("data-color",checker.color);
+            if(checker.color == "red"){
+            
+                newChecker.setAttribute("src", "graphics/red-king.png");
+                
+
+            }else{
+                //black checkers
+                newChecker.setAttribute("src", "graphics/black-king.png");
+
+            }
+            newChecker.setAttribute("height",String(pixSquare));
+            newChecker.setAttribute("width",String(pixSquare));
+
+            newChecker.style.position = "absolute";
+            //for spacing in the middle
+            //position
+            newChecker.style.top = String(pixSquare * row) + "px";
+            
+            newChecker.style.left =  String(pixSquare * col ) + "px";
+                
+            
+            //console.log("column: " + col + " ," + "row: " + row);
+            //newChecker.style.position = "relative";
+
+            //%("#overlay").append(newChecker);
+            newChecker.style.zIndex  = "3000";
+            document.getElementById("overlay").appendChild(newChecker);  
+            
+            drawArrow(ctx,oldX,oldY,newX,newY,arrowColor); 
+    	},true);
+
+        
+        $("#btnNewGame").click(function(evt) {
+            oldX =0;
+            oldY= 0;
+            newX=0;
+            newY=0;
+            draw(0,0,size);
+            whoseTurn = "black";
+            $("#player").text("Black");
+            $(".toggleColor").css('background-color','black');
+            $("#undo_button").attr("disabled",true);
+            $("#redo_button").attr("disabled",true);
+
+            board.prepareNewGame();
+
+
+        });
+
+        $("#btnAutoMove").click(function(evt) {
+          arrowColor = "yellow";
+          var playerColor = whoseTurn;
+          var playerDirection = directionOf(playerColor);
+          var result = rules.makeRandomMove(playerColor, playerDirection);
+          if (result != null) {
+            redo = [];
+            $("#redo_button").attr("disabled",true);
+            undo.push(result);
+            toggleTurn();
+          }
+        });
+
+        $("#undo_button").click(function(evt) {
+            //redo is enabled
+          $("#redo_button").attr("disabled",false);
+          //push to redo what was undone
+          var lastMove = undo.pop();
+          if(lastMove != null){
+            redo.push(lastMove);
+          }
+          
+          arrowColor = "blue";
+          var playerColor = whoseTurn;
+          var playerDirection = directionOf(playerColor);
+          /*
+           * Success Return: 
+           *  { 'from_col': X,
+           *    'to_col': XPrime,
+           *    'from_row': Y,
+           *    'to_row':Z,
+           *    'made_king':false,
+           *     'removed':[
+           *        {'col':X, 'row':Y, 'color':Z, 'isKing':true},
+           *        {'col':X, 'row':Y, 'color':Z, 'isKing':false}
+           *     ]
+           *  }*/
+          //undo the king
+          //removed checkers replaced
+          //moveTo(checker, toRow, toCol)
+          //getCheckerAt(row, col)
+          //add(checker, row, col)
+          var fromCol,toCol, fromRow,toRow,madeKing,removed;
+          fromCol =lastMove['from_col'];
+          toCol =lastMove['to_col'];
+          fromRow =lastMove['from_row'];
+          toRow =lastMove['to_row'];
+          madeKing =lastMove['made_king'];
+          removed =lastMove['remove'];
+          
+
+          if(removed[0] != null){
+
+              for(var i =0; i < removed.length; i++){
+                removedChecker = new Checker(removed[i]['color'],removed[i]['isKing']);
+
+                board.add(removedChecker, removed[i]['row'],removed[i]['col']);
+              }
+           }
+
+          checker = board.getCheckerAt(toRow,toCol);
+        if(checker == null){
+            $("#undo_button").attr("disabled",true);
+          }
+
+        if(madeKing){
+            checker.isKing = false;
+          }
+         //console.log("undoToRow(Movefrom): " + checker.row);
+         //console.log("undoToCol(Movefrom): " + checker.col);
+          board.moveTo(checker,fromRow,fromCol);
+          
+          toggleTurn();
+        //disable undo if no more undos
+        if(undo[0] == null){
+            $("#undo_button").attr("disabled",true);
+        }
+          
+        });
+
+        $("#redo_button").click(function(evt) {
+          //push to undone what was redone
+          var lastMove = redo.pop();
+          if(lastMove != null){
+            undo.push(lastMove);
+          }
+          
+          arrowColor = "yellow";
+          var playerColor = whoseTurn;
+          var playerDirection = directionOf(playerColor);
+          var fromCol,toCol, fromRow,toRow,madeKing,removed;
+
+          fromCol =lastMove['from_col'];
+          toCol =lastMove['to_col'];
+          fromRow =lastMove['from_row'];
+          toRow =lastMove['to_row'];
+          madeKing =lastMove['made_king'];
+          removed =lastMove['remove'];
+          //console.log("stuff:" + toCol);
+
+          if(removed[0] != null){
+                //we're now removing elements that we "eat" on redo
+              for(var i =0; i < removed.length; i++){
+                removedChecker = board.getCheckerAt(removed[i]['row'],removed[i]['col']);
+
+                board.remove(removedChecker);
+              }
+
+            }
+          checker = board.getCheckerAt(fromRow,fromCol);
+          if(checker == null){
+            $("#redo_button").attr("disabled",true);
+          }
+        if(madeKing){
+            checker.isKing = false;
+          }
+         //console.log("undoToRow(Movefrom): " + checker.row);
+         //console.log("undoToCol(Movefrom): " + checker.col);
+          board.moveTo(checker,toRow,toCol);
+          
+          toggleTurn();
+        //disable redo if no more redos
+        if(redo[0] == null){
+            $("#redo_button").attr("disabled",true);
+        }
+
+        });
+
+        board.prepareNewGame();
+
+
+    });
+</script>
+
+
+</head>
+
+<body>
+
+<table id="mainTable">
+    <tr>
+        <td id="navigation">
+          <table>
+			  <tr><td>		<!-- Your code here -->			
+                                        
+                    <div id = "toggle" class = "toggleColor"><span id="player" style = "color:white;">Black</span></div>
+
+              </td></tr>
+              <tr><td><input id="btnNewGame" type="button" name="new" value="New Game"/></td></tr>
+              <tr><td><input id="btnAutoMove" type="button" name="new" value="Auto Move"/></td></tr>
+              <tr><td><input id="undo_button" type="button" disabled= "true" name="new" value="Undo"/></td></tr>
+              <tr><td><input id="redo_button" type="button" disabled= "true"name="new" value="Redo"/></td></tr>
+
+            </table>
+        </td>
+
+        <td id="content">
+			
+				<!-- Your code here -->
+                <div id = "canvas-wrap">
+                    <canvas id = "canvas" width = "398" height = "398" style= "position:absolute;z-index:0;">Get a new browser</canvas>
+                    
+                    
+                    <div id = "overlay" width = "398" height = "398" style="position:absolute;"  ></div>
+
+                    <canvas id = "arrowCanvas" width = "398" height = "398" >ON TOP</canvas>
+                </div>
+                
+                <!-- END -->
+        </td>
+    </tr>
+
+   </table>
+
+</body>
+
+</html>

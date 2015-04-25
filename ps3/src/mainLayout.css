@@ -1,0 +1,65 @@
+﻿#navigation{
+	width:140px
+}
+
+#navigation table{
+	width:100%
+}
+
+#navigation input{
+	width:100%
+}
+
+#content{
+	background-color:gray;
+
+  -webkit-box-sizing: border-box; /* Safari 3.0 - 5.0, Chrome 1 - 9, Android 2.1 - 3.x */
+  -moz-box-sizing: border-box;    /* Firefox 1 - 28 */
+  box-sizing: border-box;         /* Safari 5.1+, Chrome 10+, Firefox 29+, Opera 7+, IE 8+, Android 4.0+, iOS any */
+
+
+}
+
+
+#canvas{
+	background:white;
+	padding:0px;
+
+}
+#canvas-wrap {
+	position:relative;
+	width:398px;
+	height:398px;
+
+}
+#overlay {
+	position:absolute;
+	top:0px;
+	left:0px;
+}
+
+.checker{
+	position:absolute; 
+ }
+
+.red{
+	content:url("graphics/red-piece.png");
+}
+.redKing{
+	content:url("graphics/red-king.png");
+}
+.black{
+	content:url("graphics/black-piece.png");
+}
+.blackKing{
+	content:url("graphics/black-king.png");
+}
+.toggleColor{
+	background-color:black;
+	text-align:center;
+}
+#arrowCanvas{
+	pointer-events:none;
+	position:absolute;
+	z-index:5000;
+}
